@@ -1,0 +1,514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RefurbishmentGrade {
+  LIKE_NEW
+  EXCELLENT
+  GOOD
+  FAIR
+}
+
+enum LaptopStatus {
+  DRAFT
+  ACTIVE
+  OUT_OF_STOCK
+  ARCHIVED
+}
+
+enum StorageType {
+  SSD
+  HDD
+  NVME
+  HYBRID
+}
+
+enum RamType {
+  DDR3
+  DDR4
+  DDR5
+  LPDDR4
+  LPDDR5
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  ABANDONED
+}
+
+enum CheckoutStatus {
+  STARTED
+  ADDRESS_PENDING
+  PAYMENT_PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PROCESSING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  UPI
+  NET_BANKING
+  WALLET
+  CASH_ON_DELIVERY
+  OTHER
+}
+
+enum OrderAddressType {
+  SHIPPING
+  BILLING
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  RESTOCK
+  ADJUSTMENT
+  SALE
+  CANCELLATION
+  RETURN
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum CouponRedemptionStatus {
+  APPLIED
+  CANCELLED
+}
+
+enum InquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  passwordHash       String
+  firstName          String
+  lastName           String
+  phone              String?
+  role               UserRole            @default(CUSTOMER)
+  status             UserStatus          @default(ACTIVE)
+  emailVerifiedAt    DateTime?
+  tokenVersion       Int                 @default(0)
+  addresses          UserAddress[]
+  cart               Cart?
+  wishlist           Wishlist?
+  checkouts          CheckoutSession[]
+  orders             Order[]
+  reviews            ProductReview[]
+  couponRedemptions  CouponRedemption[]
+  inventoryMovements InventoryMovement[]
+  assignedInquiries  SupportInquiry[]    @relation("InquiryAssignee")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model UserAddress {
+  id           String   @id @default(cuid())
+  label        String?
+  firstName    String
+  lastName     String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  countryCode  String   @db.VarChar(2)
+  isDefault    Boolean  @default(false)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, isDefault])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  laptops     Laptop[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Laptop {
+  id                  String              @id @default(cuid())
+  sku                 String              @unique
+  title               String
+  description         String              @db.Text
+  brand               String
+  model               String
+  releaseYear         Int?
+  processor           String
+  processorGeneration String?
+  ramGB               Int
+  ramType             RamType?
+  storageGB           Int
+  storageType         StorageType
+  graphics            String?
+  displaySizeInches   Decimal?            @db.Decimal(4, 1)
+  resolution          String?
+  displayType         String?
+  touchscreen         Boolean             @default(false)
+  operatingSystem     String?
+  color               String?
+  batteryHealthPct    Int?
+  refurbishmentGrade  RefurbishmentGrade
+  conditionNotes      String?             @db.Text
+  warrantyMonths      Int                 @default(3)
+  price               Decimal             @db.Decimal(10, 2)
+  compareAtPrice      Decimal?            @db.Decimal(10, 2)
+  currency            String              @default("USD") @db.VarChar(3)
+  stockQuantity       Int                 @default(0)
+  status              LaptopStatus        @default(DRAFT)
+  featured            Boolean             @default(false)
+  categories          Category[]
+  images              LaptopImage[]
+  cartItems           CartItem[]
+  orderItems          OrderItem[]
+  reviews             ProductReview[]
+  wishlistItems       WishlistItem[]
+  inventoryMovements  InventoryMovement[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([brand, model])
+  @@index([status, createdAt])
+  @@index([price])
+  @@index([refurbishmentGrade])
+}
+
+model LaptopImage {
+  id        String   @id @default(cuid())
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  laptopId  String
+  laptop    Laptop   @relation(fields: [laptopId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([laptopId, sortOrder])
+}
+
+model Cart {
+  id        String            @id @default(cuid())
+  status    CartStatus        @default(ACTIVE)
+  userId    String            @unique
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  checkouts CheckoutSession[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  quantity  Int      @default(1)
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  laptopId  String
+  laptop    Laptop   @relation(fields: [laptopId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, laptopId])
+  @@index([laptopId])
+}
+
+model CheckoutSession {
+  id        String         @id @default(cuid())
+  status    CheckoutStatus @default(STARTED)
+  expiresAt DateTime?
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cartId    String
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Restrict)
+  orderId   String?        @unique
+  order     Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([userId, status])
+  @@index([cartId, createdAt])
+}
+
+model Order {
+  id                 String              @id @default(cuid())
+  orderNumber        String              @unique
+  status             OrderStatus         @default(PENDING)
+  paymentStatus      PaymentStatus       @default(PENDING)
+  customerEmail      String
+  customerPhone      String?
+  subtotal           Decimal             @db.Decimal(10, 2)
+  shippingAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal             @default(0) @db.Decimal(10, 2)
+  totalAmount        Decimal             @db.Decimal(10, 2)
+  currency           String              @default("USD") @db.VarChar(3)
+  notes              String?             @db.Text
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  paymentExpiresAt   DateTime?
+  checkoutSession    CheckoutSession?
+  items              OrderItem[]
+  addresses          OrderAddress[]
+  payments           Payment[]
+  shipments          Shipment[]
+  inventoryMovements InventoryMovement[]
+  couponRedemption   CouponRedemption?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([status, paymentExpiresAt])
+}
+
+model OrderItem {
+  id                 String             @id @default(cuid())
+  productTitle       String
+  productSku         String
+  unitPrice          Decimal            @db.Decimal(10, 2)
+  quantity           Int
+  refurbishmentGrade RefurbishmentGrade
+  laptopId           String?
+  laptop             Laptop?            @relation(fields: [laptopId], references: [id], onDelete: SetNull)
+  orderId            String
+  order              Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt          DateTime           @default(now())
+
+  @@index([orderId])
+  @@index([laptopId])
+}
+
+model OrderAddress {
+  id           String           @id @default(cuid())
+  type         OrderAddressType
+  firstName    String
+  lastName     String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  countryCode  String           @db.VarChar(2)
+  orderId      String
+  order        Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+
+  @@unique([orderId, type])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  status            PaymentStatus @default(PENDING)
+  method            PaymentMethod
+  provider          String
+  providerOrderId   String?
+  providerPaymentId String?
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("USD") @db.VarChar(3)
+  failureReason     String?       @db.Text
+  paidAt            DateTime?
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@unique([provider, providerOrderId])
+  @@index([orderId, status])
+}
+
+model Shipment {
+  id             String         @id @default(cuid())
+  status         ShipmentStatus @default(PENDING)
+  carrier        String?
+  trackingNumber String?
+  trackingUrl    String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  orderId        String
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([orderId, status])
+  @@index([trackingNumber])
+}
+
+model InventoryMovement {
+  id             String                @id @default(cuid())
+  type           InventoryMovementType
+  quantityChange Int
+  previousStock  Int
+  newStock       Int
+  reason         String                @db.VarChar(500)
+  laptopId       String
+  laptop         Laptop                @relation(fields: [laptopId], references: [id], onDelete: Restrict)
+  adminId        String?
+  admin          User?                 @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  orderId        String?
+  order          Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt      DateTime              @default(now())
+
+  @@index([laptopId, createdAt])
+  @@index([adminId, createdAt])
+  @@index([orderId])
+}
+
+model Wishlist {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model WishlistItem {
+  id         String   @id @default(cuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  laptopId   String
+  laptop     Laptop   @relation(fields: [laptopId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([wishlistId, laptopId])
+  @@index([laptopId])
+}
+
+model ProductReview {
+  id        String       @id @default(cuid())
+  rating    Int
+  title     String?      @db.VarChar(150)
+  body      String       @db.VarChar(3000)
+  status    ReviewStatus @default(PENDING)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  laptopId  String
+  laptop    Laptop       @relation(fields: [laptopId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userId, laptopId])
+  @@index([laptopId, status, createdAt])
+}
+
+model Coupon {
+  id                 String             @id @default(cuid())
+  code               String             @unique @db.VarChar(40)
+  type               CouponType
+  amount             Decimal            @db.Decimal(10, 2)
+  minimumOrderAmount Decimal            @default(0) @db.Decimal(10, 2)
+  maximumDiscount    Decimal?           @db.Decimal(10, 2)
+  startsAt           DateTime?
+  expiresAt          DateTime?
+  usageLimit         Int?
+  perUserUsageLimit  Int                @default(1)
+  active             Boolean            @default(true)
+  redemptions        CouponRedemption[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([active, startsAt, expiresAt])
+}
+
+model CouponRedemption {
+  id             String                 @id @default(cuid())
+  couponId       String
+  coupon         Coupon                 @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderId        String                 @unique
+  order          Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  discountAmount Decimal                @db.Decimal(10, 2)
+  status         CouponRedemptionStatus @default(APPLIED)
+  createdAt      DateTime               @default(now())
+
+  @@index([couponId, status])
+  @@index([userId, couponId, status])
+}
+
+model SupportInquiry {
+  id              String        @id @default(cuid())
+  name            String        @db.VarChar(100)
+  email           String        @db.VarChar(254)
+  phone           String?       @db.VarChar(30)
+  subject         String        @db.VarChar(160)
+  message         String        @db.VarChar(5000)
+  status          InquiryStatus @default(NEW)
+  adminNotes      String?       @db.Text
+  assignedAdminId String?
+  assignedAdmin   User?         @relation("InquiryAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+  @@index([assignedAdminId, status])
+}
